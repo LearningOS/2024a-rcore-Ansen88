@@ -14,7 +14,8 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::config::MAX_APP_NUM;
+use crate::config::{MAX_APP_NUM, MAX_SYSCALL_NUM};
+use crate::timer::get_time_ms;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
 use lazy_static::*;
@@ -54,6 +55,8 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            syscall_times: [0; MAX_SYSCALL_NUM],
+            start: get_time_ms(),
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -88,6 +91,61 @@ impl TaskManager {
             __switch(&mut _unused as *mut TaskContext, next_task_cx_ptr);
         }
         panic!("unreachable in run_first_task!");
+    }
+    
+    fn get_task_status(&self) -> Option<TaskStatus>{
+        let inner = self.inner.exclusive_access();
+        if inner.tasks.is_empty() {
+            drop(inner);
+            return None;
+        }
+        
+        let idx = inner.current_task;
+        let status = inner.tasks[idx].task_status;
+        
+        drop(inner);
+        return Some(status);
+    }
+    fn get_syscall_times(&self, syscall_times: &mut [u32; MAX_SYSCALL_NUM])->Option<()>{
+        let inner = self.inner.exclusive_access();
+        if inner.tasks.is_empty() {
+            drop(inner);
+            return None;
+        }
+        let idx = inner.current_task;
+        let syscall = inner.tasks[idx].syscall_times;
+        
+        for i in 0..MAX_SYSCALL_NUM{
+            (*syscall_times)[i] = syscall[i];
+        }
+        
+        drop(inner);
+        return Some(());
+    }
+
+    fn set_syscall_times(&self, syscall_id: usize){
+        let mut inner = self.inner.exclusive_access();
+        if inner.tasks.is_empty() {
+            drop(inner);
+            return;
+        }
+        
+        let idx = inner.current_task;
+        inner.tasks[idx].syscall_times[syscall_id] += 1;
+        
+        drop(inner);
+    }
+    
+    fn get_run_time(&self) -> Option<usize>{
+        let inner = self.inner.exclusive_access();
+        if inner.tasks.is_empty() {
+            drop(inner);
+            return None;
+        }
+
+        let idx = inner.current_task;
+        let run_time = get_time_ms() - inner.tasks[idx].start;
+        Some(run_time)
     }
 
     /// Change the status of current `Running` task into `Ready`.
@@ -168,4 +226,24 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// Get the current task syscall times
+pub fn get_currunt_task_syscall_times(syscall_times: &mut [u32; MAX_SYSCALL_NUM])->Option<()>{
+    return TASK_MANAGER.get_syscall_times(syscall_times);
+}
+
+/// set the current task syscall times
+pub fn set_currunt_task_syscall_times(syscall_id: usize){
+    return TASK_MANAGER.set_syscall_times(syscall_id);
+}
+
+/// get the current task run time
+pub fn get_currunt_task_run_time() -> Option<usize>{
+    return TASK_MANAGER.get_run_time();
+}
+
+/// get the current task status
+pub fn get_currunt_task_task_status() -> Option<TaskStatus>{
+    return TASK_MANAGER.get_task_status();
 }
