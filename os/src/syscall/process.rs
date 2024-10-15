@@ -55,12 +55,12 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
     // -1
     unsafe{
-        let mut sys = (*_ti).syscall_times;
-        get_currunt_task_syscall_times(&mut sys);
+        // let mut sys = (*_ti).syscall_times;
+        get_currunt_task_syscall_times(&mut (*_ti).syscall_times);
         if let Some(time) = get_currunt_task_run_time() {
             (*_ti).time = time;
         }else{
-            (*_ti).time = 0;
+            return -1;
         }
         
         // (*_ti).status = TaskStatus::Running;
