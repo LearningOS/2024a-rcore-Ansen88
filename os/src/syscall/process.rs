@@ -2,8 +2,10 @@
 use crate::{
     config::MAX_SYSCALL_NUM,
     task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
+        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, current_user_token, TaskStatus,
     },
+    timer::get_time_us,
+    mm::translated_byte_buffer,
 };
 
 #[repr(C)]
@@ -43,7 +45,37 @@ pub fn sys_yield() -> isize {
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    // -1
+    let buf = _ts as *const _ as *const u8;
+    let len = core::mem::size_of::<TimeVal>();
+
+    let buffers = translated_byte_buffer(current_user_token(), buf, len);
+    if buffers.is_empty(){
+        return -1;
+    }
+    
+    let us = get_time_us();
+    let mut time = TimeVal {
+        sec: us / 1_000_000, 
+        usec: us % 1_000_000,
+    }; 
+
+    let  tt = &mut time;
+    let ptr = tt as *const _ as *const u8;
+    let mut start: usize = 0;
+    
+    for buffer in buffers {
+        let len = buffer.len();
+        // buffer.copy_from_slice(&ptr[start..start + len]);
+        unsafe {
+            let a =core::slice::from_raw_parts(ptr, len);
+            buffer.copy_from_slice(&a[start..start+len]);
+        }
+
+        start += len;
+    }
+    
+    return 0;
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
