@@ -127,10 +127,14 @@ impl PageTable {
     }
     /// set the map between virtual page number and physical page number
     #[allow(unused)]
-    pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
+    pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags)->isize {
         let pte = self.find_pte_create(vpn).unwrap();
-        assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
+        // assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
+        if pte.is_valid(){
+            return -1;
+        }
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+        return 0;
     }
     /// remove the map between virtual page number and physical page number
     #[allow(unused)]
@@ -170,4 +174,22 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         start = end_va.into();
     }
     v
+}
+
+/// mmap
+pub fn mmap(token: usize, ptr:*const u8, ppn: PhysPageNum, flags: usize)->isize{
+    let mut page_table = PageTable::from_token(token);
+    let vpn = VirtAddr::from(ptr as usize).floor();
+
+    return page_table.map(vpn, ppn, PTEFlags::from_bits_truncate(flags as u8));
+}
+
+/// mmap
+pub fn unmmap(token: usize, ptr:*const u8)->isize{
+    let mut page_table = PageTable::from_token(token);
+    let vpn = VirtAddr::from(ptr as usize).floor();
+    //fn unmap(&mut self, vpn: VirtPageNum)
+    page_table.unmap(vpn);
+
+    return 0;
 }

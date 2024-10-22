@@ -5,7 +5,7 @@ use crate::{
         change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, current_user_token, get_currunt_task_syscall_times, get_currunt_task_run_time, get_currunt_task_task_status, TaskStatus,
     },
     timer::get_time_us,
-    mm::translated_byte_buffer,
+    mm::{translated_byte_buffer, mmap, unmmap, frame_alloc, },
 };
 
 #[repr(C)]
@@ -125,13 +125,42 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    // -1
+    let end = _start + _len;
+    let mut start = _start / 4096;
+    while start < end{
+        if let Some(p) = frame_alloc(){
+            let pma = p.ppn;
+            let token = current_user_token();
+            //mmap(token: usize, ptr:*const u8, ppn: PhysPageNum, flags: usize) -> isize
+            if mmap(token, start as *const u8, pma, _port) < 0{
+                return -1;
+            }
+        }else{
+            return -1;
+        }
+        
+        start += 4096;
+    }
+    return 0;
 }
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    // -1
+    let end = _start + _len;
+    let mut start = _start / 4096;
+    while start < end{        
+        let token = current_user_token();
+        //fn unmmap(token: usize, ptr:*const u8)->isize
+        if unmmap(token, start as *const u8) < 0{
+            return -1;
+        }
+        
+        start += 4096;
+    }
+    return 0;
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {
