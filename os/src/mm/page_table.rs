@@ -129,7 +129,6 @@ impl PageTable {
     #[allow(unused)]
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags)->isize {
         let pte = self.find_pte_create(vpn).unwrap();
-        // assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
         if pte.is_valid(){
             return -1;
         }
@@ -138,10 +137,14 @@ impl PageTable {
     }
     /// remove the map between virtual page number and physical page number
     #[allow(unused)]
-    pub fn unmap(&mut self, vpn: VirtPageNum) {
+    pub fn unmap(&mut self, vpn: VirtPageNum)->isize {
         let pte = self.find_pte(vpn).unwrap();
         assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
+        if !pte.is_valid(){
+            return -1;
+        }
         *pte = PageTableEntry::empty();
+        return 0;
     }
     /// get the page table entry from the virtual page number
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
@@ -177,19 +180,48 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
 }
 
 /// mmap
-pub fn mmap(token: usize, ptr:*const u8, ppn: PhysPageNum, flags: usize)->isize{
+pub fn mmap(token: usize, _start: usize, _len: usize, _port: usize)->isize{
+    let end = _start + _len;
     let mut page_table = PageTable::from_token(token);
-    let vpn = VirtAddr::from(ptr as usize).floor();
+    let pte_flags = PTEFlags::from_bits(_port as u8).unwrap();
 
-    return page_table.map(vpn, ppn, PTEFlags::from_bits_truncate(flags as u8));
+    let mut start = VirtAddr::from(_start).floor();
+    let end= VirtAddr::from(end).ceil();
+
+    while start.0 < end.0{
+        if let Some(frame) = frame_alloc(){
+            let ppn = frame.ppn;
+
+            if page_table.map(start, ppn, pte_flags) == 0{
+                page_table.frames.push(frame);
+            }else{
+                return -1;
+            }
+        }else{
+            return -1;
+        }
+        
+        start.0 += 1;
+    }
+    return 0;
 }
 
-/// mmap
-pub fn unmmap(token: usize, ptr:*const u8)->isize{
+/// unmmap
+pub fn unmmap(token: usize, _start: usize, _len: usize)->isize{
     let mut page_table = PageTable::from_token(token);
-    let vpn = VirtAddr::from(ptr as usize).floor();
-    //fn unmap(&mut self, vpn: VirtPageNum)
-    page_table.unmap(vpn);
-
+    let end = _start + _len;
+    
+    let mut start = VirtAddr::from(_start).floor();
+    let end = VirtAddr::from(end).ceil();
+    
+    while start.0 < end.0 {
+        //fn unmap(&mut self, vpn: VirtPageNum)
+        let ret = page_table.unmap(start);
+        if ret < 0 {
+            return ret;
+        }
+        start.0 += 1;
+    }
+    
     return 0;
 }

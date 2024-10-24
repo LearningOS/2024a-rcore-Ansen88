@@ -81,6 +81,7 @@ impl FrameAllocator for StackFrameAllocator {
         if ppn >= self.current || self.recycled.iter().any(|&v| v == ppn) {
             panic!("Frame ppn={:#x} has not been allocated!", ppn);
         }
+
         // recycle
         self.recycled.push(ppn);
     }
