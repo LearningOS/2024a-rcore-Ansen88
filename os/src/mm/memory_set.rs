@@ -37,6 +37,7 @@ lazy_static! {
 pub struct MemorySet {
     page_table: PageTable,
     areas: Vec<MapArea>,
+    // 参考了 https://zhuanlan.zhihu.com/p/684184541
     vpn_areas: BTreeMap<VirtPageNum, FrameTracker>,
 }
 
@@ -46,6 +47,7 @@ impl MemorySet {
         Self {
             page_table: PageTable::new(),
             areas: Vec::new(),
+            // 参考了 https://zhuanlan.zhihu.com/p/684184541
             vpn_areas: BTreeMap::new(),
         }
     }
@@ -70,6 +72,7 @@ impl MemorySet {
             }
             if let Some(ppn) = frame_alloc() {
                 self.page_table.map(va_start, ppn.ppn, flags);
+                // 参考了 https://zhuanlan.zhihu.com/p/684184541
                 self.vpn_areas.insert(va_start, ppn);
             } else {
                 return -1;
