@@ -56,39 +56,15 @@ impl MemorySet {
     }
     /// mmap
     pub fn mmap(&mut self, start: usize, len: usize, port: usize) -> isize {
-        let va_start: VirtAddr = start.into();
-        if !va_start.aligned() {
-            debug!("unmap fail don't aligned");
-            return -1;
-        }
-        let mut va_start: VirtPageNum = va_start.into();
-        if port as u8 & !0x07 != 0 || port as u8 & 0x07 == 0{
-            return -1;
-        }
+        let mut va_start: VirtPageNum = VirtAddr::from(start).floor();
+        let va_end = VirtAddr::from(start + len).ceil();
         
-        let mut flags = PTEFlags::from_bits(port as u8).unwrap();
-        if port & 0b0000_0001 != 0 {
-            flags |= PTEFlags::R;
-        }
-
-        if port & 0b0000_0010 != 0 {
-            flags |= PTEFlags::W;
-        }
-
-        if port & 0b0000_0100 != 0 {
-            flags |= PTEFlags::X;
-        }
+        let mut flags = PTEFlags::from_bits((port << 1) as u8).unwrap();
         flags |= PTEFlags::U;
-        flags |= PTEFlags::V;
-
-        let va_end: VirtAddr = (start + len).into();
-        let va_end: VirtPageNum = va_end.ceil();
 
         while va_start != va_end {
-            // println!("map va_start = {}", va_start.0);
             if let Some(pte) = self.page_table.translate(va_start) {
                 if pte.is_valid() {
-                    // println!("mmap found exit va_start {}", va_start.0);
                     return -1;
                 }
             }
@@ -105,21 +81,12 @@ impl MemorySet {
     
     /// unmap
     pub fn unmmap(&mut self, start: usize, len: usize) -> isize {
-        let va_start: VirtAddr = start.into();
-        if !va_start.aligned() {
-            debug!("unmap fail don't aligned");
-            return -1;
-        }
-        let mut va_start: VirtPageNum = va_start.into();
-
-        let va_end: VirtAddr = (start + len).into();
-        let va_end: VirtPageNum = va_end.ceil();
+        let mut va_start = VirtAddr::from(start).floor();
+        let va_end = VirtAddr::from(start + len).ceil();
 
         while va_start != va_end {
-            // println!("unmap va_start = {}", va_start.0);
-            if let Some(item) = self.page_table.translate(va_start) {
-                if !item.is_valid() {
-                    debug!("unmap on no map vpn");
+            if let Some(pte) = self.page_table.translate(va_start) {
+                if !pte.is_valid() {
                     return -1;
                 }
             } else {

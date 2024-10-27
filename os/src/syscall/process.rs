@@ -126,7 +126,7 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
     // -1
-    if _len == 0 || _port & !0x7 != 0 || _port & 0x07 == 0{
+    if _len == 0 || _port & !0x7 != 0 || _port & 0x07 == 0 || _start & (4096 -1) !=0 {
         return -1;
     };
     mmap(_start, _len, _port)
@@ -136,6 +136,9 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
     // -1
+    if _start & (4096 -1) !=0 {
+        return -1;
+    }
     munmap(_start, _len)
 }
 /// change data segment size
