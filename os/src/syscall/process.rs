@@ -2,10 +2,10 @@
 use crate::{
     config::MAX_SYSCALL_NUM,
     task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, current_user_token, get_currunt_task_syscall_times, get_currunt_task_run_time, get_currunt_task_task_status, TaskStatus,
+        change_program_brk, exit_current_and_run_next, mmap, munmap, suspend_current_and_run_next, current_user_token, get_currunt_task_syscall_times, get_currunt_task_run_time, get_currunt_task_task_status, TaskStatus,
     },
     timer::get_time_us,
-    mm::{translated_byte_buffer, mmap, unmmap},
+    mm::translated_byte_buffer,
 };
 
 #[repr(C)]
@@ -126,19 +126,17 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
     // -1
-    let token = current_user_token();
-    
-    return mmap(token, _start, _len, _port);
+    if _len == 0 || _port & !0x7 != 0 || _port & 0x07 == 0{
+        return -1;
+    };
+    mmap(_start, _len, _port)
 }
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
     // -1
-    let token = current_user_token();
- 
-    //fn unmmap(token: usize, _start: usize, _len: usize)->isize
-    return unmmap(token, _start, _len);
+    munmap(_start, _len)
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

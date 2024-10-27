@@ -190,6 +190,20 @@ impl TaskManager {
         let cur = inner.current_task;
         inner.tasks[cur].change_program_brk(size)
     }
+    
+    /// mmap
+    pub fn mmap(&self, start: usize, len: usize, port: usize)->isize{
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].mmap(start, len, port)
+    }
+
+    /// unmmap
+    pub fn unmmap(&self, start: usize, len: usize)->isize{
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].unmmap(start, len)
+    }
 
     /// Switch current `Running` task to the task we have found,
     /// or there is no `Ready` task and we can exit with all applications completed
@@ -279,4 +293,14 @@ pub fn get_currunt_task_run_time() -> Option<usize>{
 /// get the current task status
 pub fn get_currunt_task_task_status() -> Option<TaskStatus>{
     return TASK_MANAGER.get_task_status();
+}
+
+/// mmap
+pub fn mmap(start: usize, len: usize, port: usize)->isize{
+    TASK_MANAGER.mmap(start, len, port)
+}
+
+/// unmmap
+pub fn munmap(_start: usize, _len: usize) ->isize{
+    TASK_MANAGER.unmmap(_start, _len)
 }

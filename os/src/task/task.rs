@@ -41,10 +41,12 @@ impl TaskControlBlock {
     pub fn get_trap_cx(&self) -> &'static mut TrapContext {
         self.trap_cx_ppn.get_mut()
     }
+    
     /// get the user token
     pub fn get_user_token(&self) -> usize {
         self.memory_set.token()
     }
+    
     /// Based on the elf info in program, build the contents of task in a new address space
     pub fn new(elf_data: &[u8], app_id: usize) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
@@ -104,6 +106,16 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+    
+    ///map
+    pub fn mmap(&mut self, _strart: usize, len:usize, _port:usize)->isize{
+        self.memory_set.mmap(_strart, len, _port)
+    }
+    
+    ///unmap
+    pub fn unmmap(&mut self, _strart: usize, len:usize)->isize{
+        self.memory_set.unmmap(_strart, len)
     }
 }
 
