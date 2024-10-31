@@ -9,6 +9,8 @@ use crate::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next, TaskStatus,
     },
+    timer::{get_time_us,get_time_ms},
+    mm::translated_byte_buffer,
 };
 
 #[repr(C)]
@@ -122,7 +124,37 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    // -1
+    let buf = _ts as *const _ as *const u8;
+    let len = core::mem::size_of::<TimeVal>();
+
+    let buffers = translated_byte_buffer(current_user_token(), buf, len);
+    if buffers.is_empty(){
+        return -1;
+    }
+    
+    let us = get_time_us();
+    let mut time = TimeVal {
+        sec: us / 1_000_000, 
+        usec: us % 1_000_000,
+    }; 
+
+    let  tt = &mut time;
+    let ptr = tt as *const _ as *const u8;
+    let mut start: usize = 0;
+    
+    for buffer in buffers {
+        let len = buffer.len();
+        // buffer.copy_from_slice(&ptr[start..start + len]);
+        unsafe {
+            let a =core::slice::from_raw_parts(ptr, len);
+            buffer.copy_from_slice(&a[start..start+len]);
+        }
+
+        start += len;
+    }
+    
+    return 0;
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -133,7 +165,47 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
         "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    // -1
+    let buf = _ti as *const _ as *const u8;
+    let len = core::mem::size_of::<TaskInfo>();
+    let buffers = translated_byte_buffer(current_user_token(), buf, len);
+    if buffers.is_empty(){
+        return -1;
+    }
+  
+    let task = current_task().unwrap();
+    let inner = task.inner_exclusive_access();
+    let time = get_time_ms() - inner.get_start();
+    let mut _ti = TaskInfo{
+        status: inner.get_status(),
+        syscall_times: [0; MAX_SYSCALL_NUM],
+        time,
+    };
+    inner.get_syscall_times(&mut _ti.syscall_times);
+
+    let  tt = &mut _ti;
+    let ptr = tt as *const _ as *const u8;
+    let mut start: usize = 0;
+    
+    for buffer in buffers {
+        let len = buffer.len();
+        // buffer.copy_from_slice(&ptr[start..start + len]);
+        unsafe {
+            let a =core::slice::from_raw_parts(ptr, len);
+            buffer.copy_from_slice(&a[start..start+len]);
+        }
+
+        start += len;
+    }
+    
+    return 0;
+}
+
+/// set the current task syscall times
+pub fn set_currunt_task_syscall_times(syscall_id: usize){
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    inner.set_syscall_times(syscall_id);
 }
 
 /// YOUR JOB: Implement mmap.

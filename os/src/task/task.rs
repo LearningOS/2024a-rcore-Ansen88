@@ -1,9 +1,10 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{TRAP_CONTEXT_BASE, MAX_SYSCALL_NUM};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
@@ -71,6 +72,17 @@ pub struct TaskControlBlockInner {
     
     /// task priopriority
     priority: usize,
+    
+    /// run time
+    stride: usize,
+    
+    /// stride
+    pass: usize,
+
+    /// The numbers of syscall called by task
+    syscall_times: [u32; MAX_SYSCALL_NUM],
+    /// Total running time of task
+    start: usize,
 }
 
 impl TaskControlBlockInner {
@@ -82,8 +94,22 @@ impl TaskControlBlockInner {
     pub fn get_user_token(&self) -> usize {
         self.memory_set.token()
     }
-    fn get_status(&self) -> TaskStatus {
+    pub fn get_status(&self) -> TaskStatus {
         self.task_status
+    }
+
+    pub fn get_syscall_times(&self, syscall_times: &mut [u32; MAX_SYSCALL_NUM]){
+        for i in 0..MAX_SYSCALL_NUM{
+            syscall_times[i] = self.syscall_times[i];
+        }
+    }
+
+    pub fn set_syscall_times(&mut self, id: usize){
+            self.syscall_times[id] += 1;
+    }
+
+    pub fn get_start(&self) -> usize {
+        self.start
     }
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
@@ -105,6 +131,7 @@ impl TaskControlBlock {
         let pid_handle = pid_alloc();
         let kernel_stack = kstack_alloc();
         let kernel_stack_top = kernel_stack.get_top();
+        let start = get_time_ms();
         // push a task context which goes to trap_return to the top of kernel stack
         let task_control_block = Self {
             pid: pid_handle,
@@ -122,6 +149,10 @@ impl TaskControlBlock {
                     heap_bottom: user_sp,
                     program_brk: user_sp,
                     priority: 16,
+                    stride: 0,
+                    pass: 255/16,
+                    syscall_times: [0; MAX_SYSCALL_NUM],
+                    start
                 })
             },
         };
@@ -180,6 +211,7 @@ impl TaskControlBlock {
         let pid_handle = pid_alloc();
         let kernel_stack = kstack_alloc();
         let kernel_stack_top = kernel_stack.get_top();
+        let start = get_time_ms();
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
@@ -196,6 +228,10 @@ impl TaskControlBlock {
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
                     priority: 16,
+                    stride: 0,
+                    pass: 255/16,
+                    syscall_times: [0; MAX_SYSCALL_NUM],
+                    start
                 })
             },
         });
@@ -248,7 +284,31 @@ impl TaskControlBlock {
             return -1;
         }
         self.inner_exclusive_access().priority = priority as usize;
+        self.inner_exclusive_access().pass = 255 / priority as usize;
+        return priority;
+    }
+    
+    /// get stride
+    pub fn get_stride(&self) -> usize{
+        self.inner_exclusive_access().stride
+    }
+    
+    /// add stride
+    pub fn add_stride(&self)->usize{
+        let mut inner = self.inner_exclusive_access();
+        inner.stride += inner.pass;
+        
+        return inner.stride;
+    }
+    /// set run time
+    pub fn set_run_time(&self, run_time: usize) -> isize{
+        self.inner_exclusive_access().stride = run_time;
         return 0;
+    }
+
+    /// get run time
+    pub fn get_run_time(&self) -> usize{
+        self.inner_exclusive_access().stride
     }
 }
 
