@@ -214,7 +214,13 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
         "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    // -1
+    if _len == 0 || _port & !0x7 != 0 || _port & 0x07 == 0 || _start & (4096 -1) !=0 {
+        return -1;
+    };
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    inner.memory_set.mmap(_start, _len, _port)
 }
 
 /// YOUR JOB: Implement munmap.
@@ -223,7 +229,14 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
         "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    // -1
+    if _start & (4096 -1) !=0 {
+        return -1;
+    }
+
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    inner.memory_set.unmmap(_start, _len)
 }
 
 /// change data segment size
