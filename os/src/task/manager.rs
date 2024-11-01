@@ -8,40 +8,43 @@ use lazy_static::*;
 ///A array of `TaskControlBlock` that is thread-safe
 pub struct TaskManager {
     ready_queue: VecDeque<Arc<TaskControlBlock>>,
-    // ready_queue: BTreeMap<usize,Arc<TaskControlBlock>>
 }
 
 /// A simple FIFO scheduler.
 impl TaskManager {
     ///Creat an empty TaskManager
     pub fn new() -> Self {
-        // println!("[kernel]: anlj: new");
         Self {
             ready_queue: VecDeque::new(),
-            // ready_queue: BTreeMap::new(),
         }
     }
     /// Add process back to ready queue
     pub fn add(&mut self, task: Arc<TaskControlBlock>) {
-        // println!("[kernel]: anlj: add");
+        task.add_stride();
         self.ready_queue.push_back(task);
-        // let key = task.add_stride();
-        // let key = 0;
-        
-        // self.ready_queue.insert(key, task);
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        // println!("[kernel]: anlj: fetch");
-        self.ready_queue.pop_front()
-        
-        // if let Some((_, task)) =  self.ready_queue.pop_first(){
-        //     // println!("[kernel]: anlj: task");
-        //     Some(task)
-        // }else{
-        //     // println!("[kernel]: anlj: no task");
-        //     None
-        // }
+        let mut _task: Arc<TaskControlBlock>;
+
+        if let Some(task) = self.ready_queue.pop_front(){
+                _task = task;
+        }else{
+            return None;
+        }
+
+        let num = self.ready_queue.len();
+        for _ in 0..num{
+            let task = self.ready_queue.pop_front().unwrap();
+            if _task.get_stride() > task.get_stride(){
+                self.ready_queue.push_back(_task);
+                _task = task;
+            }else{
+                self.ready_queue.push_back(task);
+            }
+        }
+
+        return Some(_task);
     }
 }
 

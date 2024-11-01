@@ -74,10 +74,10 @@ pub struct TaskControlBlockInner {
     priority: usize,
     
     /// run time
-    stride: usize,
+    pub stride: usize,
     
     /// stride
-    pass: usize,
+    pub pass: usize,
 
     /// The numbers of syscall called by task
     syscall_times: [u32; MAX_SYSCALL_NUM],
@@ -150,7 +150,7 @@ impl TaskControlBlock {
                     program_brk: user_sp,
                     priority: 16,
                     stride: 0,
-                    pass: 255/16,
+                    pass: 1000000/16,
                     syscall_times: [0; MAX_SYSCALL_NUM],
                     start
                 })
@@ -229,7 +229,7 @@ impl TaskControlBlock {
                     program_brk: parent_inner.program_brk,
                     priority: 16,
                     stride: 0,
-                    pass: 255/16,
+                    pass: 1000000/16,
                     syscall_times: [0; MAX_SYSCALL_NUM],
                     start
                 })
@@ -283,8 +283,9 @@ impl TaskControlBlock {
         if priority < 2 {
             return -1;
         }
-        self.inner_exclusive_access().priority = priority as usize;
-        self.inner_exclusive_access().pass = 255 / priority as usize;
+        let mut inner = self.inner_exclusive_access();
+        inner.priority = priority as usize;
+        inner.pass =  1000000 / priority as usize;
         return priority;
     }
     
@@ -299,16 +300,6 @@ impl TaskControlBlock {
         inner.stride += inner.pass;
         
         return inner.stride;
-    }
-    /// set run time
-    pub fn set_run_time(&self, run_time: usize) -> isize{
-        self.inner_exclusive_access().stride = run_time;
-        return 0;
-    }
-
-    /// get run time
-    pub fn get_run_time(&self) -> usize{
-        self.inner_exclusive_access().stride
     }
 }
 
