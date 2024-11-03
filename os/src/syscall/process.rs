@@ -257,8 +257,25 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         current_task().unwrap().pid.0
     );
     // -1
-    sys_fork();
-    sys_exec(_path)
+    // let ret =  sys_fork();
+    // match ret{
+    //     0 => return sys_exec(_path),
+    //     _ => return ret,
+    // }
+    // sys_fork();
+    // sys_exec(_path)
+    let token = current_user_token();
+    let path = translated_str(token, _path);
+    if let Some(data) = get_app_data_by_name(path.as_str()) {
+        let current_task = current_task().unwrap();
+        let new_task = current_task.spawn(data);
+        let pid = new_task.getpid();
+        add_task(new_task);
+        
+        pid as isize
+    } else {
+        -1
+    }
 }
 
 // YOUR JOB: Set task priority.

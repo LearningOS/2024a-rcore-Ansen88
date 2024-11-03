@@ -20,7 +20,6 @@ impl TaskManager {
     }
     /// Add process back to ready queue
     pub fn add(&mut self, task: Arc<TaskControlBlock>) {
-        task.add_stride();
         self.ready_queue.push_back(task);
     }
     /// Take a process out of the ready queue
