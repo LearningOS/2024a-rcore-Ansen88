@@ -40,6 +40,7 @@ pub fn kernel_token() -> usize {
 pub struct MemorySet {
     page_table: PageTable,
     areas: Vec<MapArea>,
+    vpn_areas: BTreeMap<VirtPageNum, FrameTracker>,
 }
 
 impl MemorySet {
@@ -48,11 +49,58 @@ impl MemorySet {
         Self {
             page_table: PageTable::new(),
             areas: Vec::new(),
+            vpn_areas: BTreeMap::new()
         }
     }
     /// Get the page table token
     pub fn token(&self) -> usize {
         self.page_table.token()
+    }
+
+    /// mmap
+    pub fn mmap(&mut self, start: usize, len: usize, port: usize) -> isize {
+        let mut va_start: VirtPageNum = VirtAddr::from(start).floor();
+        let va_end = VirtAddr::from(start + len).ceil();
+        
+        let mut flags = PTEFlags::from_bits((port << 1) as u8).unwrap();
+        flags |= PTEFlags::U;
+
+        while va_start != va_end {
+            if let Some(pte) = self.page_table.translate(va_start) {
+                if pte.is_valid() {
+                    return -1;
+                }
+            }
+            if let Some(ppn) = frame_alloc() {
+                self.page_table.map(va_start, ppn.ppn, flags);
+                // 参考了 https://zhuanlan.zhihu.com/p/684184541
+                self.vpn_areas.insert(va_start, ppn);
+            } else {
+                return -1;
+            }
+            va_start.step();
+        }
+        0
+    }
+
+    /// unmap
+    pub fn unmmap(&mut self, start: usize, len: usize) -> isize {
+        let mut va_start = VirtAddr::from(start).floor();
+        let va_end = VirtAddr::from(start + len).ceil();
+
+        while va_start != va_end {
+            if let Some(pte) = self.page_table.translate(va_start) {
+                if !pte.is_valid() {
+                    return -1;
+                }
+            } else {
+                return -1;
+            }
+            self.page_table.unmap(va_start);
+            self.vpn_areas.remove(&va_start);
+            va_start.step();
+        }
+        0
     }
     /// Assume that no conflicts.
     pub fn insert_framed_area(

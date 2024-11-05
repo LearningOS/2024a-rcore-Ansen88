@@ -23,7 +23,27 @@ impl TaskManager {
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        self.ready_queue.pop_front()
+        // self.ready_queue.pop_front()
+        let mut _task: Arc<TaskControlBlock>;
+
+        if let Some(task) = self.ready_queue.pop_front(){
+                _task = task;
+        }else{
+            return None;
+        }
+
+        let num = self.ready_queue.len();
+        for _ in 0..num{
+            let task = self.ready_queue.pop_front().unwrap();
+            if _task.get_stride() > task.get_stride(){
+                self.ready_queue.push_back(_task);
+                _task = task;
+            }else{
+                self.ready_queue.push_back(task);
+            }
+        }
+
+        return Some(_task);
     }
 }
 

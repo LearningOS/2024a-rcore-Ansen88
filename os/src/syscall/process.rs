@@ -5,11 +5,12 @@ use alloc::sync::Arc;
 use crate::{
     config::MAX_SYSCALL_NUM,
     fs::{open_file, OpenFlags},
-    mm::{translated_refmut, translated_str},
+    mm::{translated_refmut, translated_str, translated_byte_buffer},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next, TaskStatus,
     },
+    timer::{get_time_us,get_time_ms},
 };
 
 #[repr(C)]
@@ -122,7 +123,37 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    // -1
+    let buf = _ts as *const _ as *const u8;
+    let len = core::mem::size_of::<TimeVal>();
+
+    let buffers = translated_byte_buffer(current_user_token(), buf, len);
+    if buffers.is_empty(){
+        return -1;
+    }
+    
+    let us = get_time_us();
+    let mut time = TimeVal {
+        sec: us / 1_000_000, 
+        usec: us % 1_000_000,
+    }; 
+
+    let  tt = &mut time;
+    let ptr = tt as *const _ as *const u8;
+    let mut start: usize = 0;
+    
+    for buffer in buffers {
+        let len = buffer.len();
+        // buffer.copy_from_slice(&ptr[start..start + len]);
+        unsafe {
+            let a =core::slice::from_raw_parts(ptr, len);
+            buffer.copy_from_slice(&a[start..start+len]);
+        }
+
+        start += len;
+    }
+    
+    return 0;
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -133,7 +164,47 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
         "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    // -1
+    let buf = _ti as *const _ as *const u8;
+    let len = core::mem::size_of::<TaskInfo>();
+    let buffers = translated_byte_buffer(current_user_token(), buf, len);
+    if buffers.is_empty(){
+        return -1;
+    }
+  
+    let task = current_task().unwrap();
+    let inner = task.inner_exclusive_access();
+    let time = get_time_ms() - inner.get_start();
+    let mut _ti = TaskInfo{
+        status: inner.get_status(),
+        syscall_times: [0; MAX_SYSCALL_NUM],
+        time,
+    };
+    inner.get_syscall_times(&mut _ti.syscall_times);
+
+    let  tt = &mut _ti;
+    let ptr = tt as *const _ as *const u8;
+    let mut start: usize = 0;
+    
+    for buffer in buffers {
+        let len = buffer.len();
+        // buffer.copy_from_slice(&ptr[start..start + len]);
+        unsafe {
+            let a =core::slice::from_raw_parts(ptr, len);
+            buffer.copy_from_slice(&a[start..start+len]);
+        }
+
+        start += len;
+    }
+    
+    return 0;
+}
+
+/// set the current task syscall times
+pub fn set_currunt_task_syscall_times(syscall_id: usize){
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    inner.set_syscall_times(syscall_id);
 }
 
 /// YOUR JOB: Implement mmap.
@@ -142,7 +213,13 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
         "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    // -1
+    if _len == 0 || _port & !0x7 != 0 || _port & 0x07 == 0 || _start & (4096 -1) !=0 {
+        return -1;
+    };
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    inner.memory_set.mmap(_start, _len, _port)
 }
 
 /// YOUR JOB: Implement munmap.
@@ -151,7 +228,14 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
         "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    // -1
+    if _start & (4096 -1) !=0 {
+        return -1;
+    }
+
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    inner.memory_set.unmmap(_start, _len)
 }
 
 /// change data segment size
@@ -171,7 +255,20 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    // -1
+    let token = current_user_token();
+    let path = translated_str(token, _path);
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all();
+        let current_task = current_task().unwrap();
+
+        let new_task = current_task.spawn(all_data.as_slice());
+        let pid = new_task.getpid();
+        add_task(new_task);
+        pid as isize
+    } else {
+        -1
+    }
 }
 
 // YOUR JOB: Set task priority.
@@ -180,5 +277,6 @@ pub fn sys_set_priority(_prio: isize) -> isize {
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    // -1
+    return current_task().unwrap().set_priority(_prio);
 }
