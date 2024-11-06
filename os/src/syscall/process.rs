@@ -1,11 +1,12 @@
 use crate::{
     config::MAX_SYSCALL_NUM,
     fs::{open_file, OpenFlags},
-    mm::{translated_ref, translated_refmut, translated_str},
+    mm::{translated_ref, translated_refmut, translated_str, translated_byte_buffer},
     task::{
         current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
         suspend_current_and_run_next, SignalFlags, TaskStatus,
     },
+    timer::get_time_us,
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
 
@@ -167,7 +168,37 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().process.upgrade().unwrap().getpid()
     );
-    -1
+    // -1
+    let buf = _ts as *const _ as *const u8;
+    let len = core::mem::size_of::<TimeVal>();
+
+    let buffers = translated_byte_buffer(current_user_token(), buf, len);
+    if buffers.is_empty(){
+        return -1;
+    }
+    
+    let us = get_time_us();
+    let mut time = TimeVal {
+        sec: us / 1_000_000, 
+        usec: us % 1_000_000,
+    }; 
+
+    let  tt = &mut time;
+    let ptr = tt as *const _ as *const u8;
+    let mut start: usize = 0;
+    
+    for buffer in buffers {
+        let len = buffer.len();
+        // buffer.copy_from_slice(&ptr[start..start + len]);
+        unsafe {
+            let a =core::slice::from_raw_parts(ptr, len);
+            buffer.copy_from_slice(&a[start..start+len]);
+        }
+
+        start += len;
+    }
+    
+    return 0;
 }
 
 /// task_info syscall
