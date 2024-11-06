@@ -1,74 +1,55 @@
-# 报告 —— chapter5练习
+# 报告 —— chapter8练习
 
 ## 报告人 ：安利军
 
 
 
-## 简单总结你实现的功能
-
-spawn系统调用：
-
-+ 创建一个新的任务
-+ 加载要执行的代码
-+ 将该任务的parent字段设置为当前任务
-+ 当前的子任务设置为新创建的任务
-+ 返回新任务的 pid
-
-
-
-stride调度器：
-
-+ 当设置任务的优先级时，重新设置 pass = 1000000 / 优先级；
-+ suspend_current_and_run_next() 函数中实现更新当前任务的 stride += pass；
-+ 在 fetch() 函数中，通过判断 stride 获取最小 stride 的任务，并返回执行；
-
-
-
 ## 问答作业
 
-+ p1.stride = 255, p2.stride = 250，在 p2 执行一个时间片后，理论上下一次应该 p1 执行。实际情况是轮到 p1 执行吗？为什么？
+当一个进程的主线程（0号线程）退出时，整个进程退出，需要回收的资源包括：
 
-​	下一次要执行 p2，因为 p2溢出后会小于255，所以根据 stride 的调度规则，会重新调度 p2。
++ 内存
++ 文件描述符
++ 线程特定数据
++ 锁和其他同步对象
 
+其他线程的 TaskControlBlock 可能在哪些位置被引用，分别是否需要回收，为什么
 
++ 会被线程调度器使用，需要被回收，当进程退出时，所有线程都应该被终止，调度器中的引用需要被清除，对应的 `TaskControlBlock` 需要被销毁以释放内存；
++ 会被等待队列使用，需要被回收，当进程退出时，所有等待队列中的线程都应该被唤醒或终止，确保没有悬空指针，等待队列中的 `TaskControlBlock` 也需要被清理；
++ 线程池，当进程退出时，线程池中的所有线程都应该被终止，线程池中的 `TaskControlBlock` 也需要被清理；
 
-+ 如果严格按照算法执行，那么 STRIDE_MAX – STRIDE_MIN <= BigStride / 2。为什么？尝试简单说明（不要求严格证明）。
+两种 `Mutex.unlock` 的实现主要区别
 
-当所有进程的优先级都大于等于 2 时，意味着每个进程的 stride 增量至少为 2。设 BigStride 是所有进程 stride 增量的最大值，即 255（对于8位无符号整型）。如果所有进程的 stride 增量都至少为 2，那么即使某个进程的 stride 达到了最大值 255，它也只会比其他进程的 stride 最多大 127（255/2），因为任何进程的 stride 增加 2 后就会超过 255 并发生溢出，从而减小到一个小于 128 的值。因此，在不考虑溢出的情况下，STRIDE_MAX – STRIDE_MIN 的差值将不会超过 BigStride / 2。
+1. 锁状态更新时机
 
+   ：
 
+   - Mutex1：无论是否有等待任务，都会立即将锁状态设为未锁定。
+   - Mutex2：只有在没有等待任务时才将锁状态设为未锁定。
 
-+ 让 BinaryHeap<Stride> 的 pop 方法能返回真正最小的 Stride。补全下列代码中的* `partial_cmp` 函数，假设两个 Stride 永远不会相等。
+可能导致的问题
 
-```rust
-use core::cmp::Ordering;
+1. Mutex1 实现的问题
 
-struct Stride(u64);
+- 竞态条件
 
-impl PartialOrd for Stride {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let diff = if self.0 > other.0 {
-            self.0 - other.0
-        } else {
-            other.0 - self.0
-        };
-        
-        if diff <= 127 {
-            Some(self.0.cmp(&other.0))
-        } else {
-            Some(other.0.cmp(&self.0))
-        }
-    }
-    }
-}
+  ：
 
-impl PartialEq for Stride {
-    fn eq(&self, other: &Self) -> bool {
-        false
-    }
-}
-```
+  - 如果有多个线程在等待锁，而当前持有锁的线程释放锁后，`locked` 状态立即被设为 `false`。此时，如果有其他线程尝试获取锁，它可能会成功获取，而原本应该获得锁的等待线程则会进入一个错误的状态，因为它认为自己已经获得了锁，但实际上锁已经被其他线程获取了。这可能导致竞态条件或死锁。
 
+- 资源浪费
+
+  ：
+
+  - 由于 `locked` 状态被立即设为 `false`，即使有等待线程被唤醒，锁的状态也会在短时间内频繁切换，这可能会导致不必要的性能开销。
+
+2. Mutex2 实现的优点
+
+- 正确性：
+  - 在 `Mutex2` 实现中，如果有等待任务，锁的状态不会被设为 `unlocked`，直到所有的等待任务都被唤醒并且至少有一个成功获取了锁。这样可以确保锁的行为符合预期，避免竞态条件和死锁。
+- 性能：
+  - 只有在没有等待任务时才将锁状态设为 `unlocked`，减少了不必要的锁状态切换，提高了性能。
 
 
 ## 荣誉准则
